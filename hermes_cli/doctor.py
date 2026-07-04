@@ -1148,6 +1148,34 @@ def run_doctor(args):
     except Exception:
         pass
 
+    # Claude Agent SDK runtime — only surfaced when the user has opted into it
+    # (provider claude-agent, or model.anthropic_runtime: claude_agent_sdk),
+    # so default installs don't see an irrelevant "claude CLI" row.
+    try:
+        from hermes_cli.config import load_config
+
+        _cfg = load_config() or {}
+        _model_cfg = _cfg.get("model") if isinstance(_cfg, dict) else {}
+        if not isinstance(_model_cfg, dict):
+            _model_cfg = {}
+        _prov = str(_model_cfg.get("provider") or "").strip().lower()
+        _runtime = str(_model_cfg.get("anthropic_runtime") or "").strip().lower()
+        _claude_agent_configured = (
+            _prov in {"claude-agent", "claude-sdk", "claude-subscription"}
+            or _runtime == "claude_agent_sdk"
+        )
+        if _claude_agent_configured:
+            from agent.transports.claude_agent_session import check_claude_binary
+
+            ok, msg = check_claude_binary()
+            if ok:
+                check_ok("Claude Code CLI (claude_agent_sdk runtime)", f"({msg})")
+            else:
+                check_warn("Claude Code CLI (claude_agent_sdk runtime)")
+                check_info(msg)
+    except Exception:
+        pass
+
     _section("Directory Structure")
     hermes_home = HERMES_HOME
     if hermes_home.exists():

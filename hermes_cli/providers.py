@@ -102,6 +102,15 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         transport="anthropic_messages",
         extra_env_vars=("ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
     ),
+    # Claude via the Claude Agent SDK using a Claude subscription (Claude Code
+    # OAuth). Selecting this provider always routes through the SDK runtime —
+    # no base URL (the SDK spawns Claude Code), auth is external via the
+    # `claude` CLI login or CLAUDE_CODE_OAUTH_TOKEN.
+    "claude-agent": HermesOverlay(
+        transport="claude_agent_sdk",
+        auth_type="oauth_external",
+        extra_env_vars=("CLAUDE_CODE_OAUTH_TOKEN",),
+    ),
     "zai": HermesOverlay(
         transport="openai_chat",
         extra_env_vars=("GLM_API_KEY", "ZAI_API_KEY", "Z_AI_API_KEY"),
@@ -262,6 +271,10 @@ ALIASES: Dict[str, str] = {
     "build-nvidia": "nvidia",
     "nemotron": "nvidia",
 
+    # claude-agent (Claude Agent SDK, subscription OAuth)
+    "claude-sdk": "claude-agent",
+    "claude-subscription": "claude-agent",
+
     # kimi-for-coding (models.dev ID)
     "kimi": "kimi-for-coding",
     "kimi-coding": "kimi-for-coding",
@@ -363,6 +376,7 @@ _LABEL_OVERRIDES: Dict[str, str] = {
     "moa": "Mixture of Agents",
     "nous": "Nous Portal",
     "openai-codex": "OpenAI Codex",
+    "claude-agent": "Claude (subscription)",
     "copilot-acp": "GitHub Copilot ACP",
     "stepfun": "StepFun Step Plan",
     "xiaomi": "Xiaomi MiMo",
@@ -383,6 +397,7 @@ TRANSPORT_TO_API_MODE: Dict[str, str] = {
     "anthropic_messages": "anthropic_messages",
     "codex_responses": "codex_responses",
     "bedrock_converse": "bedrock_converse",
+    "claude_agent_sdk": "claude_agent_sdk",
 }
 
 

@@ -1215,6 +1215,16 @@ def switch_model(
             if not api_key:
                 api_key = "no-key-required"
 
+    # --- claude-agent has no HTTP endpoint: never inherit a previous
+    # provider's base_url. A stale URL here gets probed for context length on
+    # startup / switch and freezes the CLI on its connect timeout. Force an
+    # empty base_url and the SDK api_mode so the persisted result is clean. ---
+    if (target_provider or "").strip().lower() in {
+        "claude-agent", "claude-sdk", "claude-subscription"
+    }:
+        base_url = ""
+        api_mode = "claude_agent_sdk"
+
     # --- Normalize model name for target provider ---
     new_model = normalize_model_for_provider(new_model, target_provider)
 
@@ -1761,6 +1771,18 @@ def list_authenticated_providers(
                     has_creds = True
             except Exception as exc:
                 logger.debug("Anthropic external creds check failed: %s", exc)
+        # claude-agent's auth lives entirely in the Claude Code CLI
+        # (subscription login / CLAUDE_CODE_OAUTH_TOKEN in the Keychain), not
+        # in an env var or the Hermes auth store — so the checks above never
+        # see it. Treat it as available when the `claude` CLI is installed:
+        # the user has clearly set it up, and login is validated at turn time.
+        if not has_creds and hermes_slug == "claude-agent":
+            try:
+                from agent.transports.claude_agent_session import check_claude_binary
+                ok, _ = check_claude_binary()
+                has_creds = bool(ok)
+            except Exception as exc:
+                logger.debug("claude CLI availability check failed: %s", exc)
         if not has_creds:
             continue
 
@@ -1781,6 +1803,15 @@ def list_authenticated_providers(
                 model_ids = _ids if _ids else (curated.get(hermes_slug, []) or curated.get(pid, []))
             except Exception:
                 model_ids = curated.get(hermes_slug, []) or curated.get(pid, [])
+        elif hermes_slug == "claude-agent":
+            # No REST /models catalog on this runtime — surface the provider
+            # profile's curated fallback_models (opus/sonnet/haiku + aliases).
+            try:
+                from providers import get_provider_profile as _gpp
+                _prof = _gpp("claude-agent")
+                model_ids = list(_prof.fallback_models) if _prof else []
+            except Exception:
+                model_ids = []
         elif hermes_slug == "nous":
             # Nous serves a large live /v1/models catalog (vendor-prefixed
             # models from many providers, returned alphabetically). The

@@ -1947,6 +1947,15 @@ def get_model_context_length(
             logger.debug("MoA aggregator context-length resolution failed", exc_info=True)
         # Fall through to the generic default if aggregator resolution failed.
 
+    # 0a-claude. claude-agent (Claude Agent SDK) — there is no HTTP /models
+    # endpoint to probe (the Claude Code subprocess owns the connection), and
+    # the resolved base_url is often a stale leftover from a previous provider.
+    # Every probe below would then hang on that URL's connect timeout before
+    # falling through to the default. Return Claude's standard context window
+    # directly so startup and /model switches stay instant.
+    if (provider or "").strip().lower() in {"claude-agent", "claude-sdk", "claude-subscription"}:
+        return 200000
+
     # 0b. custom_providers per-model override — check before any probe.
     # This closes the gap where /model switch and display paths used to fall
     # back to 128K despite the user having a per-model context_length set.

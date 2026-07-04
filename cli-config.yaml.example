@@ -45,6 +45,13 @@ model:
   # api_key: "your-key-here"  # Uncomment to set here instead of .env
   base_url: "https://openrouter.ai/api/v1"
 
+  # Optional opt-in: route Anthropic turns through the Claude Agent SDK
+  # (Claude Code subprocess) using your Claude subscription instead of an
+  # API key. Requires: npm i -g @anthropic-ai/claude-code (logged in) and
+  # pip install claude-agent-sdk. Eligible providers: anthropic, claude-agent.
+  # Values: auto (default, unchanged) | claude_agent_sdk
+  # anthropic_runtime: claude_agent_sdk
+
   # Azure Foundry keyless auth example:
   # provider: "azure-foundry"
   # base_url: "https://<resource>.openai.azure.com/openai/v1"

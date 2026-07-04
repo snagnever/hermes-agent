@@ -340,6 +340,12 @@ _VALID_API_MODES = {
     # `model.openai_runtime == "codex_app_server"` AND provider in
     # {"openai", "openai-codex"}. Default is unchanged.
     "codex_app_server",
+    # Optional opt-in: hand the entire turn to the Claude Agent SDK (Claude
+    # Code subprocess) so terminal/file-ops/patching/sandboxing run inside
+    # Claude Code's own runtime using a Claude subscription (OAuth). Gated
+    # behind config key `model.anthropic_runtime == "claude_agent_sdk"` AND
+    # provider in {"anthropic", "claude-agent"}. Default is unchanged.
+    "claude_agent_sdk",
 }
 
 
@@ -386,6 +392,38 @@ def _maybe_apply_codex_app_server_runtime(
     runtime = str(model_cfg.get("openai_runtime") or "").strip().lower()
     if runtime == "codex_app_server":
         return "codex_app_server"
+    return api_mode
+
+
+def _maybe_apply_claude_agent_runtime(
+    *,
+    provider: str,
+    api_mode: str,
+    model_cfg: Optional[Dict[str, Any]],
+) -> str:
+    """Optional opt-in: rewrite api_mode → "claude_agent_sdk" for Anthropic
+    providers when the user has enabled the runtime via
+    `model.anthropic_runtime: claude_agent_sdk` in config.yaml.
+
+    Two ways in:
+      * provider == "claude-agent" — the provider IS the SDK runtime, so it
+        always routes through it, independent of any config flag. This is
+        the path taken when the user picks "Claude (subscription)" via
+        /model.
+      * provider == "anthropic" AND model.anthropic_runtime == "claude_agent_sdk"
+        — opt-in reroute of the plain Anthropic provider (the
+        make-it-my-default path). Unset/"auto"/empty is a no-op.
+
+    Returns the (possibly-rewritten) api_mode."""
+    if provider == "claude-agent":
+        return "claude_agent_sdk"
+    if not model_cfg:
+        return api_mode
+    if provider != "anthropic":
+        return api_mode
+    runtime = str(model_cfg.get("anthropic_runtime") or "").strip().lower()
+    if runtime == "claude_agent_sdk":
+        return "claude_agent_sdk"
     return api_mode
 
 
@@ -515,6 +553,11 @@ def _resolve_runtime_from_pool_entry(
     # Optional opt-in: route OpenAI/Codex turns through `codex app-server`.
     # Inert when `model.openai_runtime` is unset or "auto".
     api_mode = _maybe_apply_codex_app_server_runtime(
+        provider=provider, api_mode=api_mode, model_cfg=model_cfg
+    )
+    # Optional opt-in: route Anthropic turns through the Claude Agent SDK.
+    # Inert when `model.anthropic_runtime` is unset or "auto".
+    api_mode = _maybe_apply_claude_agent_runtime(
         provider=provider, api_mode=api_mode, model_cfg=model_cfg
     )
 
@@ -1532,6 +1575,21 @@ def resolve_runtime_provider(
             "base_url": "moa://local",
             "api_key": "moa-virtual-provider",
             "source": "moa-virtual-provider",
+            "requested_provider": requested_provider,
+        }
+
+    # Claude Agent SDK runtime: the turn is driven by a Claude Code subprocess
+    # which owns auth (subscription login / CLAUDE_CODE_OAUTH_TOKEN). Hermes
+    # needs no in-process API key or base URL, so short-circuit before the
+    # credential-pool / generic resolver (which would reject claude-agent as an
+    # unknown provider). Selecting this provider always means the SDK runtime.
+    if requested_provider in {"claude-agent", "claude-sdk", "claude-subscription"}:
+        return {
+            "provider": "claude-agent",
+            "api_mode": "claude_agent_sdk",
+            "base_url": "",
+            "api_key": "no-key-required",
+            "source": "claude-agent-sdk",
             "requested_provider": requested_provider,
         }
 

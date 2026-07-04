@@ -3806,6 +3806,19 @@ def validate_requested_model(
                 "message": f"Could not read MoA presets: {exc}",
             }
 
+    if normalized in {"claude-agent", "claude-sdk", "claude-subscription"}:
+        # No REST /models endpoint on this runtime — the Claude Agent SDK
+        # validates the model (and aliases like opus/sonnet) at turn time
+        # inside Claude Code. Accept without a network probe so the switch is
+        # instant and doesn't warn about an "unreachable API" that, by design,
+        # doesn't exist here.
+        return {
+            "accepted": True,
+            "persist": True,
+            "recognized": True,
+            "message": None,
+        }
+
     if any(ch.isspace() for ch in requested):
         return {
             "accepted": False,

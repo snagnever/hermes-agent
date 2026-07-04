@@ -630,6 +630,18 @@ def run_conversation(
             should_review_memory=_should_review_memory,
         )
 
+    # Optional opt-in runtime: hand the turn to the Claude Agent SDK (Claude
+    # Code subprocess, subscription OAuth). Sibling of the codex_app_server
+    # gate above. See agent/claude_runtime.py for the adapter.
+    if agent.api_mode == "claude_agent_sdk":
+        return agent._run_claude_agent_sdk_turn(
+            user_message=user_message,
+            original_user_message=original_user_message,
+            messages=messages,
+            effective_task_id=effective_task_id,
+            should_review_memory=_should_review_memory,
+        )
+
     while (api_call_count < agent.max_iterations and agent.iteration_budget.remaining > 0) or agent._budget_grace_call:
         # Reset per-turn checkpoint dedup so each iteration can take one snapshot
         agent._checkpoint_mgr.new_turn()
