@@ -66,19 +66,22 @@ pay-per-token API usage.
 - No `temperature` / `top_p` control — the SDK does not expose sampling params.
 - `delegate_task` / `memory` / `todo` Hermes agent-loop tools are unavailable
   on this runtime (same limitation as the `codex_app_server` runtime).
-- Auxiliary tasks need a separate provider. Hermes runs small helper tasks
-  (session-title generation, auto-compression, the vision helper, memory
-  extraction) on a separate LLM client that requires an API key / HTTP
-  endpoint — the Claude Code subprocess only drives the main turn. Without
-  one, those tasks are skipped (non-fatal: e.g. sessions keep a default
-  title). To enable them, configure a cheap auxiliary provider alongside the
-  subscription main, e.g.:
+- Auxiliary tasks (title generation, compression, memory extraction) run
+  through the Claude Agent SDK on a cheap model (Haiku) automatically when no
+  HTTP aux provider is configured and the `claude` CLI is present — so a
+  subscription-only setup gets them with no extra key. Each such call spawns
+  a short-lived Claude Code subprocess (~5-7s), so they're best-effort helpers
+  rather than hot-path calls. To use a faster API-key backend for aux instead
+  (avoiding the subprocess spawn), configure one explicitly:
 
   ```yaml
   auxiliary:
     provider: anthropic        # or openrouter, etc. — needs its own key
     model: claude-haiku-4-5
   ```
+
+  Streaming and tool-calling auxiliary tasks (e.g. the vision helper) are not
+  routed through the SDK and still need an HTTP provider.
 - There is no REST `/models` catalog on this path, so the model picker uses
   the profile's `fallback_models` (SDK aliases `opus`/`sonnet` resolve to your
   subscription's current models).

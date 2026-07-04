@@ -5919,6 +5919,73 @@ def _obj_get(obj: Any, key: str, default: Any = None) -> Any:
     return value
 
 
+_CLAUDE_AGENT_AUX_MODEL = "claude-haiku-4-5"
+
+
+def _claude_agent_aux_available() -> bool:
+    """True when the Claude Code CLI is installed, so aux tasks can run
+    through the Claude Agent SDK on a Claude subscription (no API key)."""
+    try:
+        from agent.transports.claude_agent_session import check_claude_binary
+
+        ok, _ = check_claude_binary()
+        return bool(ok)
+    except Exception:
+        return False
+
+
+def _claude_agent_oneshot_response(messages, *, model=None, timeout=None) -> Any:
+    """Run a stateless auxiliary call through the Claude Agent SDK (Claude
+    subscription, cheap model) and return an OpenAI-ChatCompletion-shaped
+    object so ``extract_content_or_reasoning`` and other callers work unchanged.
+
+    Used for subscription-only setups where there is no HTTP aux client: the
+    Claude Code subprocess drives the main turn, and small helper tasks
+    (title generation, compression, …) route here on a Haiku model.
+    """
+    import os
+    from types import SimpleNamespace
+
+    from agent.transports.claude_agent_session import ClaudeAgentSession
+
+    system = "\n\n".join(
+        str(m.get("content") or "")
+        for m in messages
+        if isinstance(m, dict) and m.get("role") == "system"
+    ).strip()
+    user = "\n\n".join(
+        str(m.get("content") or "")
+        for m in messages
+        if isinstance(m, dict) and m.get("role") != "system"
+    ).strip()
+
+    session = ClaudeAgentSession(
+        model=model or _CLAUDE_AGENT_AUX_MODEL,
+        cwd=os.getcwd(),
+        auto_approve=True,           # aux prompts never touch tools
+        enable_hermes_tools=False,   # skip the ~17s MCP boot — aux needs no tools
+        system_prompt=system or None,
+    )
+    try:
+        turn = session.run_turn(user or system, turn_timeout=timeout or 60.0)
+    finally:
+        session.close()
+    if turn.error:
+        raise RuntimeError(f"claude-agent auxiliary call failed: {turn.error}")
+
+    msg = SimpleNamespace(
+        content=turn.final_text or "",
+        reasoning=None,
+        reasoning_content=None,
+        reasoning_details=None,
+        tool_calls=None,
+    )
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=msg, finish_reason="stop")],
+        usage=turn.usage or {},
+    )
+
+
 def call_llm(
     task: str = None,
     *,
@@ -5976,6 +6043,23 @@ def call_llm(
         resolved_api_mode = api_mode
     effective_extra_body = _get_task_extra_body(task)
     effective_extra_body.update(extra_body or {})
+
+    # Claude Agent SDK aux route: this runtime has no HTTP client, so run a
+    # stateless one-shot through the SDK (Claude subscription, cheap model).
+    # Triggers when the aux task explicitly resolves to claude-agent — via
+    # config or inherited from a claude-agent main session. Streaming and
+    # tool-calling aux tasks are out of scope here and fall through.
+    if (
+        not stream
+        and not tools
+        and (
+            resolved_api_mode == "claude_agent_sdk"
+            or _normalize_aux_provider(resolved_provider) == "claude-agent"
+        )
+    ):
+        return _claude_agent_oneshot_response(
+            messages, model=resolved_model, timeout=timeout,
+        )
 
     if task == "vision":
         effective_provider, client, final_model = resolve_vision_provider_client(
@@ -6039,6 +6123,18 @@ def call_llm(
                 logger.info("Auxiliary %s: provider %s unavailable, trying auto-detection chain",
                             task or "call", resolved_provider)
                 client, final_model = _get_cached_client("auto", main_runtime=main_runtime, task=task)
+        if client is None and not stream and not tools and _claude_agent_aux_available():
+            # Last resort: no HTTP aux provider is configured, but the Claude
+            # Code CLI is installed — run the aux call through the Claude Agent
+            # SDK (subscription, Haiku) instead of failing. This is what makes
+            # title generation / compression work on a subscription-only setup.
+            logger.info(
+                "Auxiliary %s: no HTTP provider — routing through claude-agent SDK (%s)",
+                task or "call", _CLAUDE_AGENT_AUX_MODEL,
+            )
+            return _claude_agent_oneshot_response(
+                messages, model=_CLAUDE_AGENT_AUX_MODEL, timeout=timeout,
+            )
         if client is None:
             raise RuntimeError(
                 f"No LLM provider configured for task={task} provider={resolved_provider}. "
