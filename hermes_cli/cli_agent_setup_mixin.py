@@ -106,7 +106,12 @@ class CLIAgentSetupMixin:
                 print("\n⚠️  Provider resolver returned an empty API key. "
                       "Set OPENROUTER_API_KEY or run: hermes setup")
                 return False
-        if not isinstance(base_url, str) or not base_url:
+        # The claude_agent_sdk runtime has no HTTP endpoint — the Claude Code
+        # subprocess owns the connection — so an empty base URL is expected and
+        # not an error. Every other runtime requires one.
+        if resolved_api_mode != "claude_agent_sdk" and (
+            not isinstance(base_url, str) or not base_url
+        ):
             print("\n⚠️  Provider resolver returned an empty base URL. "
                   "Check your provider config or run: hermes setup")
             return False
