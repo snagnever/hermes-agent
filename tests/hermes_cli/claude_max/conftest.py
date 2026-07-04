@@ -156,15 +156,27 @@ class FakeClient:
             yield StreamEvent(event=step)
 
 
+_SCRIPT_QUEUE: list = []
+
+
 def _client_factory(options=None):
-    return FakeClient(options)
+    client = FakeClient(options)
+    if _SCRIPT_QUEUE:
+        client._steps = _SCRIPT_QUEUE.pop(0)
+    return client
 
 
 @pytest.fixture
 def fake_sdk(monkeypatch):
-    """Inject a stub claude_agent_sdk; yield the module for scripting access."""
+    """Inject a stub claude_agent_sdk; yield the module for scripting access.
+
+    Use ``fake_sdk.queue_script(steps)`` before a request so the next
+    FakeClient (created inside the handler) preloads that turn's steps.
+    """
+    _SCRIPT_QUEUE.clear()
     mod = types.ModuleType("claude_agent_sdk")
     mod.ClaudeSDKClient = _client_factory
+    mod.queue_script = lambda steps: _SCRIPT_QUEUE.append(list(steps))
     mod.ClaudeAgentOptions = lambda **kw: types.SimpleNamespace(**kw)
     mod.StreamEvent = StreamEvent
     mod.AssistantMessage = AssistantMessage
