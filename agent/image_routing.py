@@ -280,6 +280,13 @@ def _resolve_inference_base_url(
 
     model_cfg_raw = cfg.get("model")
     model_cfg: Dict[str, Any] = model_cfg_raw if isinstance(model_cfg_raw, dict) else {}
+    # The claude-agent runtime has no HTTP endpoint — the Claude Code
+    # subprocess owns the connection. Never hand out a base_url for it: a
+    # stale leftover (e.g. a previous provider's LM Studio LAN URL) would be
+    # probed here and hang on the connect timeout at banner time.
+    _eff_provider = (provider or str(model_cfg.get("provider") or "")).strip().lower()
+    if _eff_provider in {"claude-agent", "claude-sdk", "claude-subscription"}:
+        return ""
     base_url = str(model_cfg.get("base_url") or "").strip()
     if base_url:
         return base_url
@@ -323,6 +330,8 @@ def _should_probe_ollama_vision(provider: str, base_url: str) -> bool:
     p = (provider or "").strip().lower()
     if p == "ollama":
         return True
+    if p in {"claude-agent", "claude-sdk", "claude-subscription"}:
+        return False  # no HTTP endpoint — never probe (would hang on connect)
     if not base_url:
         return False
     try:
