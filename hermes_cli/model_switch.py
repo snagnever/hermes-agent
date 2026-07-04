@@ -1215,6 +1215,16 @@ def switch_model(
             if not api_key:
                 api_key = "no-key-required"
 
+    # --- claude-agent has no HTTP endpoint: never inherit a previous
+    # provider's base_url. A stale URL here gets probed for context length on
+    # startup / switch and freezes the CLI on its connect timeout. Force an
+    # empty base_url and the SDK api_mode so the persisted result is clean. ---
+    if (target_provider or "").strip().lower() in {
+        "claude-agent", "claude-sdk", "claude-subscription"
+    }:
+        base_url = ""
+        api_mode = "claude_agent_sdk"
+
     # --- Normalize model name for target provider ---
     new_model = normalize_model_for_provider(new_model, target_provider)
 
