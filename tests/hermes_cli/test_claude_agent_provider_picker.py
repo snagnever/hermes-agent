@@ -44,6 +44,38 @@ def test_label_is_subscription_friendly():
     assert _LABEL_OVERRIDES["claude-agent"] == "Claude (subscription)"
 
 
+def test_claude_agent_appears_in_picker_when_cli_installed(monkeypatch):
+    # The picker lists claude-agent when the `claude` CLI is available (its
+    # auth lives in the CLI, not an env var / auth store). Mock the check so
+    # the test doesn't depend on a real claude install.
+    monkeypatch.setattr(
+        "agent.transports.claude_agent_session.check_claude_binary",
+        lambda *a, **k: (True, "claude 2.x"),
+    )
+    from hermes_cli.model_switch import list_picker_providers
+
+    rows = list_picker_providers()
+    row = next((r for r in rows if r.get("slug") == "claude-agent"), None)
+    assert row is not None, f"claude-agent missing; got {[r.get('slug') for r in rows]}"
+    assert row["name"] == "Claude (subscription)"
+    assert row["models"]  # non-empty (profile fallback_models)
+    assert any("opus" in m for m in row["models"])
+
+
+def test_claude_agent_hidden_from_picker_without_cli(monkeypatch):
+    # No claude CLI → not shown (avoids cluttering the picker for users who
+    # haven't set it up).
+    monkeypatch.setattr(
+        "agent.transports.claude_agent_session.check_claude_binary",
+        lambda *a, **k: (False, "not found"),
+    )
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    from hermes_cli.model_switch import list_picker_providers
+
+    rows = list_picker_providers()
+    assert not any(r.get("slug") == "claude-agent" for r in rows)
+
+
 def test_resolve_runtime_provider_short_circuits_without_credentials():
     # /model switch path: resolve_runtime_provider must return a keyless SDK
     # runtime instead of raising "Unknown provider" from the credential pool.
