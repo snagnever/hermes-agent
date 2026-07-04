@@ -2429,6 +2429,16 @@ def cmd_proxy(args):
         raise SystemExit(rc)
 
 
+def cmd_claude_max(args):
+    """Local Anthropic-compatible proxy backed by the Claude Agent SDK."""
+    # Lazy import — pulls in aiohttp/SDK, gated behind the [claude-max] extra.
+    from hermes_cli.claude_max.cli import cmd_claude_max as _cmd_claude_max
+
+    rc = _cmd_claude_max(args)
+    if isinstance(rc, int) and rc != 0:
+        raise SystemExit(rc)
+
+
 def cmd_whatsapp(args):
     """Set up WhatsApp: choose mode, configure, install bridge, pair via QR."""
     _require_tty("whatsapp")
@@ -12847,6 +12857,10 @@ def main():
     build_gateway_parser(
         subparsers, cmd_gateway=cmd_gateway, cmd_proxy=cmd_proxy, cmd_gateway_enroll=cmd_gateway_enroll
     )
+
+    # claude-max: local Claude-subscription proxy (Anthropic-compatible).
+    from hermes_cli.claude_max.cli import build_claude_max_parser
+    build_claude_max_parser(subparsers, cmd_claude_max=cmd_claude_max)
 
     # =========================================================================
     # lsp command

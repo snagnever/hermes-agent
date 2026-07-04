@@ -3788,6 +3788,11 @@ def validate_requested_model(
             "message": "Model name cannot be empty.",
         }
 
+    if normalized in {"claude-max", "claudemax", "claude-max-proxy", "cmax"}:
+        # Local proxy has no /models endpoint to probe; the SDK validates the
+        # model at turn time. Accept without a network probe (instant switch).
+        return {"accepted": True, "persist": True, "recognized": True, "message": None}
+
     if normalized == "moa":
         try:
             from hermes_cli.config import load_config
