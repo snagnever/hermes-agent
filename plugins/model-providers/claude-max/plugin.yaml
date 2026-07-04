@@ -1,0 +1,5 @@
+name: claude-max-profile
+kind: model-provider
+version: 1.0.0
+description: Claude subscription via a local Anthropic-compatible proxy (Claude Agent SDK)
+author: vitor
