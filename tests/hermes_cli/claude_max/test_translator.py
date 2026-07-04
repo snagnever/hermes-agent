@@ -156,6 +156,13 @@ def test_map_result_error_generic():
     assert body["error"]["type"] == "api_error"
 
 
+def test_map_result_error_usage_quota():
+    status, body = T.map_result_error(
+        {"is_error": True, "result": "400 You're out of extra usage. Add more..."})
+    assert status == 429
+    assert body["error"]["type"] == "rate_limit_error"
+
+
 def test_anthropic_error_shape():
     body = T.anthropic_error_body("rate_limit_error", "slow down")
     assert body == {"type": "error", "error": {"type": "rate_limit_error", "message": "slow down"}}

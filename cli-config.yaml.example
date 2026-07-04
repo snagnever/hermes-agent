@@ -45,6 +45,13 @@ model:
   # api_key: "your-key-here"  # Uncomment to set here instead of .env
   base_url: "https://openrouter.ai/api/v1"
 
+  # Claude subscription via a local Anthropic-compatible proxy (Claude Agent
+  # SDK) — no API key needed; auto-starts on use. Requires the `claude` CLI
+  # (logged in) and: pip install 'hermes-agent[claude-max]'. See
+  # plugins/model-providers/claude-max/README.md.
+  #   provider: claude-max
+  #   default: claude-opus-4-8
+
   # Azure Foundry keyless auth example:
   # provider: "azure-foundry"
   # base_url: "https://<resource>.openai.azure.com/openai/v1"

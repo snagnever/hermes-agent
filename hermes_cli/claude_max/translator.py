@@ -303,7 +303,9 @@ def map_result_error(result_message: Any) -> tuple[int, dict]:
         return 401, anthropic_error_body(
             "authentication_error",
             text or "Claude authentication failed — run `claude` and /login.")
-    if any(s in low for s in ("rate limit", "overloaded", "too many requests", "429")):
-        return 429, anthropic_error_body("rate_limit_error", text or "rate limited")
+    if any(s in low for s in ("rate limit", "overloaded", "too many requests", "429",
+                              "out of extra usage", "usage limit", "out of usage",
+                              "quota")):
+        return 429, anthropic_error_body("rate_limit_error", text or "usage limit reached")
     return 500, anthropic_error_body(
         "api_error", text or f"claude-max error ({subtype or 'unknown'})")

@@ -43,33 +43,37 @@ def _canonical(args: Any) -> str:
 
 
 class ToolBridge:
-    """Correlates blocking MCP handlers with tool_results delivered by id."""
+    """Correlates blocking MCP handlers with tool_results delivered by id.
+
+    Correlation is by tool NAME (FIFO): the stream's content_block_start for a
+    tool_use carries an empty ``input`` (the real args stream via
+    input_json_delta), so args aren't reliable at note time. Handlers are
+    invoked sequentially in the same order tool_use blocks stream (spike
+    exp 4), so name-FIFO maps each handler invocation to the right tool_use id.
+    """
 
     def __init__(self) -> None:
-        # (tool_name, canonical_args) -> FIFO of tool_use ids seen in the stream
-        self._id_queue: dict[tuple[str, str], list[str]] = {}
+        self._id_queue: dict[str, list[str]] = {}       # tool_name -> FIFO of ids
         self._futures: dict[str, asyncio.Future] = {}   # tool_use_id -> future
         self._results: dict[str, dict] = {}             # tool_use_id -> result (early)
 
-    def note_tool_use(self, tool_use_id: str, prefixed_name: str, input_data: Any) -> None:
+    def note_tool_use(self, tool_use_id: str, prefixed_name: str, input_data: Any = None) -> None:
         """Record a tool_use block observed in the stream so a later handler
-        invocation can be mapped to this id."""
-        key = (strip_tool_prefix(prefixed_name), _canonical(input_data))
-        self._id_queue.setdefault(key, []).append(tool_use_id)
+        invocation can be mapped to this id (by tool name, in order)."""
+        self._id_queue.setdefault(strip_tool_prefix(str(prefixed_name)), []).append(tool_use_id)
 
     def make_handler(self, tool_name: str):
         bridge = self
 
         async def _handler(args: Any) -> dict:
-            key = (tool_name, _canonical(args))
-            ids = bridge._id_queue.get(key)
+            ids = bridge._id_queue.get(tool_name)
             tool_use_id = ids.pop(0) if ids else None
             if tool_use_id is not None and tool_use_id in bridge._results:
                 return bridge._results.pop(tool_use_id)
             fut: asyncio.Future = asyncio.get_event_loop().create_future()
             # If we couldn't correlate an id yet, park under a synthetic key so
             # abort_all still reaches it; deliver_result matches by id when known.
-            park_id = tool_use_id or f"__uncorrelated__:{key[0]}:{len(bridge._futures)}"
+            park_id = tool_use_id or f"__uncorrelated__:{tool_name}:{len(bridge._futures)}"
             bridge._futures[park_id] = fut
             try:
                 return await fut

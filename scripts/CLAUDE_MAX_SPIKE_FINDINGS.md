@@ -31,6 +31,17 @@ Validated against the real SDK + logged-in `claude` CLI via `scripts/claude_max_
 ### EXP 8 — isolation (CONFIRMED)
 - `system_prompt` applies; `setting_sources=[]` → no project CLAUDE.md / user settings leak.
 
+## Live E2E results (against the real subscription)
+
+Server auto-started via `hermes claude-max start`, then:
+- `GET /v1/models` → catalog, `max_input_tokens: 200000`. ✓
+- non-stream `POST /v1/messages` → real "PONG", `stop_reason=end_turn`, usage populated. ✓
+- **anthropic python SDK** (hermes' actual transport) `messages.stream()` → "1 2 3 4 5". ✓
+- **anthropic SDK tool round-trip** → r1 `stop_reason=tool_use` (get_weather{city:Lisbon}); r2 with tool_result → continuation "sunny 24°C". ✓
+- `hermes -z ... --provider claude-max` → auto-started, resolved runtime, reached Claude (turn blocked only by subscription quota exhaustion — surfaced correctly). ✓
+
+**Bug found + fixed via E2E**: the stream's `content_block_start` for tool_use carries an EMPTY `input` (real args stream via `input_json_delta`), so correlating handler→tool_use_id by (name, args) failed and the handler blocked forever. Fixed to correlate by **tool NAME FIFO** (handlers run sequentially in stream order).
+
 ## Design implications locked
 1. **Bridge = blocking MCP handlers** (primary; no fallback needed). `tools=[]` + `create_sdk_mcp_server("hermes", …)` + `allowed_tools=["mcp__hermes__*"]` + `include_partial_messages=True` + `setting_sources=[]` + `env` MCP-timeout knobs + big `max_turns`.
 2. **One HTTP response = one assistant message cycle** (`message_start`→`message_stop`), terminated at `stop_reason=tool_use` (tools pending) or `ResultMessage` (final).
