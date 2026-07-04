@@ -42,3 +42,27 @@ def test_label_is_subscription_friendly():
     from hermes_cli.providers import _LABEL_OVERRIDES
 
     assert _LABEL_OVERRIDES["claude-agent"] == "Claude (subscription)"
+
+
+def test_resolve_runtime_provider_short_circuits_without_credentials():
+    # /model switch path: resolve_runtime_provider must return a keyless SDK
+    # runtime instead of raising "Unknown provider" from the credential pool.
+    from hermes_cli.runtime_provider import resolve_runtime_provider
+
+    for requested in ("claude-agent", "claude-sdk", "claude-subscription"):
+        rt = resolve_runtime_provider(requested=requested, target_model="opus")
+        assert rt["provider"] == "claude-agent"
+        assert rt["api_mode"] == "claude_agent_sdk"
+        assert rt["base_url"] == ""
+        assert rt["api_key"]  # a non-empty sentinel, never an empty string
+
+
+def test_switch_validation_accepts_claude_agent_models():
+    from hermes_cli.models import validate_requested_model
+
+    for model in ("opus", "sonnet", "claude-opus-4-8"):
+        v = validate_requested_model(
+            model, "claude-agent",
+            api_key="no-key-required", base_url="", api_mode="claude_agent_sdk",
+        )
+        assert v.get("accepted") is True

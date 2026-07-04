@@ -1578,6 +1578,21 @@ def resolve_runtime_provider(
             "requested_provider": requested_provider,
         }
 
+    # Claude Agent SDK runtime: the turn is driven by a Claude Code subprocess
+    # which owns auth (subscription login / CLAUDE_CODE_OAUTH_TOKEN). Hermes
+    # needs no in-process API key or base URL, so short-circuit before the
+    # credential-pool / generic resolver (which would reject claude-agent as an
+    # unknown provider). Selecting this provider always means the SDK runtime.
+    if requested_provider in {"claude-agent", "claude-sdk", "claude-subscription"}:
+        return {
+            "provider": "claude-agent",
+            "api_mode": "claude_agent_sdk",
+            "base_url": "",
+            "api_key": "no-key-required",
+            "source": "claude-agent-sdk",
+            "requested_provider": requested_provider,
+        }
+
     # Azure Anthropic short-circuit: when explicitly targeting an Azure endpoint
     # with provider="anthropic", bypass _resolve_named_custom_runtime (which would
     # return provider="custom" with chat_completions api_mode and no valid key).
