@@ -1,0 +1,5 @@
+name: claude-agent-profile
+kind: model-provider
+version: 1.0.0
+description: Claude models through the Claude Agent SDK with Claude-subscription OAuth
+author: vitor
