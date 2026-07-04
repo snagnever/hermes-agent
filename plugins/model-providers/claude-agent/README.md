@@ -10,17 +10,41 @@ subscription-backed use via the Agent SDK.
 1. `npm install -g @anthropic-ai/claude-code` and run `claude` once → `/login`
    with your Claude subscription (or export `CLAUDE_CODE_OAUTH_TOKEN` from
    `claude setup-token` for headless hosts).
-2. `pip install claude-agent-sdk` (>=0.1) into Hermes' environment.
-3. In `config.yaml`:
-
-   ```yaml
-   model:
-     default: claude-opus-4-8
-     provider: claude-agent
-     anthropic_runtime: claude_agent_sdk
-   ```
-4. `hermes doctor` — the "Claude Code CLI (claude_agent_sdk runtime)" check
+2. `pip install claude-agent-sdk` (or `hermes-agent[claude-agent]`) into
+   Hermes' environment.
+3. `hermes doctor` — the "Claude Code CLI (claude_agent_sdk runtime)" check
    should pass.
+
+## Using it
+
+**As a switchable option (recommended)** — keep your normal default model and
+switch into Claude-subscription when you want it. `claude-agent` shows up in
+the `/model` picker as **"Claude (subscription)"** with opus / sonnet / haiku,
+or switch directly:
+
+```
+/model opus --provider claude-agent
+```
+
+Selecting the `claude-agent` provider always routes through the Agent SDK —
+no config flag needed. Switch back with `/model <your-model>` any time.
+
+**As your default** — set it in `config.yaml`:
+
+```yaml
+model:
+  default: claude-opus-4-8
+  provider: claude-agent
+```
+
+Or reroute the plain `anthropic` provider through the SDK without changing
+provider, via the opt-in flag:
+
+```yaml
+model:
+  provider: anthropic
+  anthropic_runtime: claude_agent_sdk   # auto (default) leaves the API-key path unchanged
+```
 
 ## How it works
 

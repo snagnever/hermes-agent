@@ -405,14 +405,21 @@ def _maybe_apply_claude_agent_runtime(
     providers when the user has enabled the runtime via
     `model.anthropic_runtime: claude_agent_sdk` in config.yaml.
 
-    Default behavior preserved: unset/"auto"/empty is a no-op. Only
-    providers in {"anthropic", "claude-agent"} are eligible — other
-    providers cannot be rerouted through the Claude Agent SDK.
+    Two ways in:
+      * provider == "claude-agent" — the provider IS the SDK runtime, so it
+        always routes through it, independent of any config flag. This is
+        the path taken when the user picks "Claude (subscription)" via
+        /model.
+      * provider == "anthropic" AND model.anthropic_runtime == "claude_agent_sdk"
+        — opt-in reroute of the plain Anthropic provider (the
+        make-it-my-default path). Unset/"auto"/empty is a no-op.
 
     Returns the (possibly-rewritten) api_mode."""
+    if provider == "claude-agent":
+        return "claude_agent_sdk"
     if not model_cfg:
         return api_mode
-    if provider not in {"anthropic", "claude-agent"}:
+    if provider != "anthropic":
         return api_mode
     runtime = str(model_cfg.get("anthropic_runtime") or "").strip().lower()
     if runtime == "claude_agent_sdk":

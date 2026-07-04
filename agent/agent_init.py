@@ -341,6 +341,11 @@ def init_agent(
     elif (provider_name is None) and agent._base_url_hostname == "api.x.ai":
         agent.api_mode = "codex_responses"
         agent.provider = "xai"
+    elif agent.provider in {"claude-agent", "claude-sdk", "claude-subscription"}:
+        # The claude-agent provider IS the Claude Agent SDK runtime — selecting
+        # it (e.g. via /model) always routes through the SDK, no config flag.
+        agent.api_mode = "claude_agent_sdk"
+        agent.provider = "claude-agent"
     elif agent.provider == "anthropic" or (provider_name is None and agent._base_url_hostname == "api.anthropic.com"):
         agent.api_mode = "anthropic_messages"
         agent.provider = "anthropic"
@@ -794,6 +799,15 @@ def init_agent(
         if not agent.quiet_mode:
             _gr_label = " + Guardrails" if agent._bedrock_guardrail_config else ""
             print(f"🤖 AI Agent initialized with model: {agent.model} (AWS Bedrock, {agent._bedrock_region}{_gr_label})")
+    elif agent.api_mode == "claude_agent_sdk":
+        # Claude Agent SDK runtime — the turn is driven by a Claude Code
+        # subprocess (see agent/claude_runtime.py), so no OpenAI-wire client
+        # and no in-process API key are needed. Auth lives in the Claude Code
+        # credential chain (subscription login / CLAUDE_CODE_OAUTH_TOKEN).
+        agent.client = None
+        agent._client_kwargs = {}
+        if not agent.quiet_mode:
+            print(f"🤖 AI Agent initialized with model: {agent.model} (Claude subscription, Agent SDK)")
     else:
         if api_key and base_url:
             # Explicit credentials from CLI/gateway — construct directly.

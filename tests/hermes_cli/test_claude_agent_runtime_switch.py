@@ -26,6 +26,16 @@ def test_gate_rewrites_for_claude_agent_provider():
     assert out == "claude_agent_sdk"
 
 
+def test_claude_agent_provider_routes_without_flag():
+    # Selecting the claude-agent provider (e.g. via /model) always routes
+    # through the SDK, independent of any config flag.
+    for cfg in (None, {}, {"anthropic_runtime": ""}, {"anthropic_runtime": "auto"}):
+        out = _maybe_apply_claude_agent_runtime(
+            provider="claude-agent", api_mode="chat_completions", model_cfg=cfg
+        )
+        assert out == "claude_agent_sdk"
+
+
 def test_gate_noop_when_unset_or_auto():
     for cfg in (None, {}, {"anthropic_runtime": ""}, {"anthropic_runtime": "auto"}):
         out = _maybe_apply_claude_agent_runtime(

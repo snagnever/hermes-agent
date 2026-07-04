@@ -55,6 +55,21 @@ def test_api_mode_is_claude_agent_sdk():
     assert agent.api_mode == "claude_agent_sdk"
 
 
+def test_provider_claude_agent_implies_sdk_without_explicit_api_mode():
+    # Picking the claude-agent provider (no api_mode passed) must resolve to
+    # the SDK runtime — the provider is self-describing.
+    agent = run_agent.AIAgent(
+        api_key="stub",
+        base_url="",
+        provider="claude-agent",
+        quiet_mode=True,
+        skip_context_files=True,
+        skip_memory=True,
+    )
+    assert agent.api_mode == "claude_agent_sdk"
+    assert agent.provider == "claude-agent"
+
+
 def test_run_conversation_dispatches_claude_agent_sdk():
     with patch("agent.claude_runtime.run_claude_agent_sdk_turn") as run_turn:
         run_turn.return_value = {
