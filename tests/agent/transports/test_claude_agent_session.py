@@ -119,3 +119,56 @@ def test_run_turn_error_is_captured_not_raised(fake_claude_sdk, tmp_path):
         assert "error_during_execution" in result.error
     finally:
         session.close()
+
+
+def test_permission_handler_denies_without_callback(fake_claude_sdk, tmp_path):
+    import asyncio
+
+    session = _make_session(tmp_path, auto_approve=False, approval_callback=None)
+    handler = session._make_permission_handler()
+    result = asyncio.run(handler("Bash", {"command": "rm -rf /"}, None))
+    assert type(result).__name__ == "PermissionResultDeny"
+
+
+def test_permission_handler_allows_hermes_tools(fake_claude_sdk, tmp_path):
+    import asyncio
+
+    session = _make_session(tmp_path, auto_approve=False, approval_callback=None)
+    handler = session._make_permission_handler()
+    result = asyncio.run(handler("mcp__hermes-tools__web_search", {"query": "x"}, None))
+    assert type(result).__name__ == "PermissionResultAllow"
+
+
+def test_permission_handler_forwards_to_hermes_callback(fake_claude_sdk, tmp_path):
+    import asyncio
+
+    calls = []
+
+    # Real Hermes approval-callback signature (verified against
+    # tools.terminal_tool / codex_app_server_session): the callback takes
+    # (command, description, allow_permanent=False) and returns one of
+    # 'once' | 'session' | 'always' | 'deny'.
+    def approval(command, description, allow_permanent=False):
+        calls.append((command, description, allow_permanent))
+        return "once"
+
+    session = _make_session(tmp_path, auto_approve=False, approval_callback=approval)
+    handler = session._make_permission_handler()
+    result = asyncio.run(handler("Bash", {"command": "ls"}, None))
+    assert type(result).__name__ == "PermissionResultAllow"
+    assert len(calls) == 1
+    command, description, allow_permanent = calls[0]
+    assert "ls" in command
+    assert allow_permanent is False
+
+
+def test_permission_handler_denies_on_deny_choice(fake_claude_sdk, tmp_path):
+    import asyncio
+
+    def approval(command, description, allow_permanent=False):
+        return "deny"
+
+    session = _make_session(tmp_path, auto_approve=False, approval_callback=approval)
+    handler = session._make_permission_handler()
+    result = asyncio.run(handler("Bash", {"command": "ls"}, None))
+    assert type(result).__name__ == "PermissionResultDeny"

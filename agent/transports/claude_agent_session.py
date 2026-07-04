@@ -135,11 +135,37 @@ class ClaudeAgentSession:
         }
 
     def _make_permission_handler(self):
-        # Filled in by Task 6; lifecycle task ships a permissive stub.
-        async def _handler(tool_name, input_data, context):  # pragma: no cover
-            from claude_agent_sdk import PermissionResultAllow
+        approval_callback = self._approval_callback
 
-            return PermissionResultAllow(updated_input=input_data)
+        async def _handler(tool_name: str, input_data: dict, context: Any):
+            import asyncio as _asyncio
+
+            from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+
+            # Hermes' own tools re-enter Hermes dispatch, which applies its
+            # own approval policy — don't double-gate.
+            if tool_name.startswith("mcp__hermes-tools__"):
+                return PermissionResultAllow(updated_input=input_data)
+            if approval_callback is None:
+                # Gateway/cron: no UI to prompt through — fail closed,
+                # mirroring the codex runtime's default.
+                return PermissionResultDeny(
+                    message="no Hermes approval UI available; denied by policy",
+                )
+            command, description = _describe_tool_for_approval(tool_name, input_data)
+            try:
+                # Hermes approval callbacks are per-thread/UI-bound and block;
+                # run off the event loop. Signature matches the codex path:
+                # (command, description, allow_permanent=False) -> choice str.
+                choice = await _asyncio.to_thread(
+                    approval_callback, command, description, allow_permanent=False
+                )
+            except Exception:
+                logger.debug("hermes approval callback raised", exc_info=True)
+                return PermissionResultDeny(message="approval callback error")
+            if str(choice).strip().lower() in _APPROVE_CHOICES:
+                return PermissionResultAllow(updated_input=input_data)
+            return PermissionResultDeny(message=f"denied by user ({choice})")
 
         return _handler
 
@@ -264,6 +290,30 @@ class ClaudeAgentSession:
 
     def __exit__(self, *exc: Any) -> None:
         self.close()
+
+
+# Hermes approval choices that grant permission. The Hermes approval
+# callback returns 'once' | 'session' | 'always' | 'deny' (see
+# codex_app_server_session._approval_choice_to_codex_decision); the extra
+# synonyms keep alternate callbacks working.
+_APPROVE_CHOICES = frozenset(
+    {"once", "session", "always", "approve", "approved", "yes", "allow"}
+)
+
+
+def _describe_tool_for_approval(tool_name: str, input_data: Any) -> tuple[str, str]:
+    """Render a Claude Code tool call into (command, description) for the
+    Hermes approval prompt, mirroring how the codex path labels exec/patch
+    requests so the user sees what's actually about to run."""
+    data = input_data if isinstance(input_data, dict) else {}
+    if tool_name in {"Bash", "BashOutput"} and data.get("command"):
+        command = str(data["command"])
+    elif data.get("file_path"):
+        command = f"{tool_name}: {data['file_path']}"
+    else:
+        rendered = _json_dumps(data)[:160]
+        command = f"{tool_name} {rendered}".strip()
+    return command, f"Claude Code requests {tool_name}"
 
 
 def _json_dumps(obj: Any) -> str:
