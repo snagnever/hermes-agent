@@ -46,3 +46,32 @@ def test_provider_known_to_picker():
 
     assert get_provider("claude-max") is not None
     assert _LABEL_OVERRIDES["claude-max"] == "Claude Max (subscription proxy)"
+
+
+def test_claude_max_appears_in_model_picker_when_cli_installed(monkeypatch):
+    # The /model picker lists claude-max when the `claude` CLI is available
+    # (its auth is in the CLI, not env). Mock the check for hermeticity.
+    monkeypatch.setattr(
+        "hermes_cli.claude_max.manager.check_claude_binary",
+        lambda *a, **k: (True, "claude 2.x"),
+    )
+    from hermes_cli.model_switch import list_picker_providers
+
+    rows = list_picker_providers()
+    row = next((r for r in rows if r.get("slug") == "claude-max"), None)
+    assert row is not None, f"claude-max missing; got {[r.get('slug') for r in rows]}"
+    assert row["name"] == "Claude Max (subscription proxy)"
+    assert row["models"] and any("opus" in m for m in row["models"])
+
+
+def test_claude_max_hidden_from_picker_without_cli(monkeypatch):
+    monkeypatch.setattr(
+        "hermes_cli.claude_max.manager.check_claude_binary",
+        lambda *a, **k: (False, "not found"),
+    )
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.delenv("HERMES_CLAUDE_MAX_PORT", raising=False)
+    from hermes_cli.model_switch import list_picker_providers
+
+    rows = list_picker_providers()
+    assert not any(r.get("slug") == "claude-max" for r in rows)
