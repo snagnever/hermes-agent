@@ -248,7 +248,14 @@ class ClaudeAgentSession:
                 result.session_id = message.session_id
                 result.usage = message.usage or {}
                 if message.is_error:
+                    # The SDK sometimes reports auth/CLI failures as
+                    # is_error=True with subtype="success" and the real
+                    # message in `result` (e.g. "Not logged in · Please run
+                    # /login") — surface that text, not just the subtype.
+                    detail = (message.result or "").strip()
                     result.error = f"claude-agent-sdk: {message.subtype}"
+                    if detail:
+                        result.error += f" — {detail}"
                 final = message.result or "".join(last_text_parts)
                 result.final_text = final or ""
 
