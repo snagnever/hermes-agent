@@ -69,5 +69,12 @@ pay-per-token API usage.
 - There is no REST `/models` catalog on this path, so the model picker uses
   the profile's `fallback_models` (SDK aliases `opus`/`sonnet` resolve to your
   subscription's current models).
+- Hermes tools cold-start: the injected `hermes-tools` MCP server takes
+  ~15-20s to boot (it imports Hermes and registers its tool surface), and
+  Claude Code loads MCP servers asynchronously. A first message sent within
+  that window may not see `mcp__hermes-tools__*` tools yet — they become
+  available once the server finishes connecting (typically by the time you
+  send your first message in an interactive session). Claude Code's own
+  tools (Bash, file ops) are available immediately.
 - `claude-agent-sdk` is versioned alongside Claude Code; if the SDK's
   `ClaudeAgentOptions` fields drift, pin/upgrade both together.
