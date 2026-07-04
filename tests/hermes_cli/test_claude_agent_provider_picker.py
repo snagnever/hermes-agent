@@ -66,3 +66,6 @@ def test_switch_validation_accepts_claude_agent_models():
             api_key="no-key-required", base_url="", api_mode="claude_agent_sdk",
         )
         assert v.get("accepted") is True
+        assert v.get("recognized") is True
+        # No network-probe warning — there is no /models endpoint by design.
+        assert v.get("message") is None
