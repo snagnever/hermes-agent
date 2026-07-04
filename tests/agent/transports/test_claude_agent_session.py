@@ -172,3 +172,17 @@ def test_permission_handler_denies_on_deny_choice(fake_claude_sdk, tmp_path):
     handler = session._make_permission_handler()
     result = asyncio.run(handler("Bash", {"command": "ls"}, None))
     assert type(result).__name__ == "PermissionResultDeny"
+
+
+def test_request_interrupt_calls_sdk_interrupt(fake_claude_sdk, tmp_path):
+    session = _make_session(tmp_path)
+    session.ensure_started()
+    try:
+        session.request_interrupt()
+        import time
+        deadline = time.time() + 2
+        while not fake_claude_sdk.clients[0].interrupted and time.time() < deadline:
+            time.sleep(0.01)
+        assert fake_claude_sdk.clients[0].interrupted
+    finally:
+        session.close()

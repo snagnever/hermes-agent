@@ -262,6 +262,15 @@ class ClaudeAgentSession:
         except Exception:
             logger.debug("tool progress callback raised", exc_info=True)
 
+    def request_interrupt(self) -> None:
+        """Thread-safe: interrupt the in-flight turn (no-op when idle)."""
+        if self._client is None or self._loop is None or self._closed:
+            return
+        active = self._active_result
+        if active is not None:
+            active.interrupted = True
+        asyncio.run_coroutine_threadsafe(self._client.interrupt(), self._loop)
+
     def is_alive(self) -> bool:
         return (
             not self._closed
