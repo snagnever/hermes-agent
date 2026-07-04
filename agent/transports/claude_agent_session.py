@@ -325,6 +325,31 @@ def _describe_tool_for_approval(tool_name: str, input_data: Any) -> tuple[str, s
     return command, f"Claude Code requests {tool_name}"
 
 
+def check_claude_binary(claude_bin: str = "claude") -> tuple[bool, str]:
+    """Verify the Claude Code CLI is installed. Returns (ok, message)."""
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            [claude_bin, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return False, (
+            f"claude CLI not found at {claude_bin!r}. Install with: "
+            f"npm install -g @anthropic-ai/claude-code — then run `claude` "
+            f"once and log in with your Claude subscription."
+        )
+    except subprocess.TimeoutExpired:
+        return False, "claude --version timed out"
+    if proc.returncode != 0:
+        return False, f"claude --version exited {proc.returncode}: {proc.stderr.strip()}"
+    return True, proc.stdout.strip()
+
+
 def _json_dumps(obj: Any) -> str:
     import json
 

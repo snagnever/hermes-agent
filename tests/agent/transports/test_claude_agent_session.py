@@ -174,6 +174,14 @@ def test_permission_handler_denies_on_deny_choice(fake_claude_sdk, tmp_path):
     assert type(result).__name__ == "PermissionResultDeny"
 
 
+def test_check_claude_binary_missing():
+    from agent.transports.claude_agent_session import check_claude_binary
+
+    ok, msg = check_claude_binary("definitely-not-a-real-binary-xyz")
+    assert ok is False
+    assert "not found" in msg
+
+
 def test_request_interrupt_calls_sdk_interrupt(fake_claude_sdk, tmp_path):
     session = _make_session(tmp_path)
     session.ensure_started()
