@@ -148,6 +148,94 @@ class ClaudeAgentSession:
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return future.result(timeout)
 
+    # ---------- turn driving ----------
+
+    def run_turn(self, user_input: Any, *, turn_timeout: float = 600.0) -> ClaudeTurnResult:
+        """Send one user message; block until the SDK's ResultMessage."""
+        result = ClaudeTurnResult()
+        try:
+            self.ensure_started()
+        except (RuntimeError, TimeoutError) as exc:
+            result.error = f"claude-agent-sdk startup failed: {exc}"
+            result.should_retire = True
+            return result
+        text = user_input if isinstance(user_input, str) else _coerce_input_text(user_input)
+        self._active_result = result
+        try:
+            self._run(self._turn_coro(text, result), timeout=turn_timeout)
+        except TimeoutError:
+            result.error = f"claude-agent-sdk turn timed out after {turn_timeout}s"
+            result.should_retire = True
+        except Exception as exc:
+            result.error = f"claude-agent-sdk turn failed: {exc}"
+            result.should_retire = True
+        finally:
+            self._active_result = None
+        if result.session_id:
+            self._session_id = result.session_id
+        return result
+
+    async def _turn_coro(self, text: str, result: ClaudeTurnResult) -> None:
+        from claude_agent_sdk import (
+            AssistantMessage,
+            ResultMessage,
+            TextBlock,
+            ToolUseBlock,
+        )
+
+        await self._client.query(text)
+        last_text_parts: list[str] = []
+        async for message in self._client.receive_response():
+            if isinstance(message, AssistantMessage):
+                text_parts: list[str] = []
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        text_parts.append(block.text)
+                    elif isinstance(block, ToolUseBlock):
+                        result.tool_iterations += 1
+                        self._emit_tool_progress(block)
+                        result.projected_messages.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "id": block.id,
+                                "type": "function",
+                                "function": {
+                                    "name": block.name,
+                                    "arguments": _json_dumps(block.input),
+                                },
+                            }],
+                        })
+                        # Claude Code executes the tool itself; project a
+                        # synthetic ack so the transcript stays well-formed.
+                        result.projected_messages.append({
+                            "role": "tool",
+                            "tool_call_id": block.id,
+                            "content": "[executed inside Claude Code runtime]",
+                        })
+                if text_parts:
+                    last_text_parts = text_parts
+                    result.projected_messages.append(
+                        {"role": "assistant", "content": "".join(text_parts)}
+                    )
+            elif isinstance(message, ResultMessage):
+                result.session_id = message.session_id
+                result.usage = message.usage or {}
+                if message.is_error:
+                    result.error = f"claude-agent-sdk: {message.subtype}"
+                final = message.result or "".join(last_text_parts)
+                result.final_text = final or ""
+
+    def _emit_tool_progress(self, block) -> None:
+        callback = self.tool_progress_callback
+        if callback is None:
+            return
+        try:
+            preview = _json_dumps(block.input)[:120]
+            callback(block.name, preview, dict(block.input or {}))
+        except Exception:
+            logger.debug("tool progress callback raised", exc_info=True)
+
     def is_alive(self) -> bool:
         return (
             not self._closed
@@ -176,3 +264,38 @@ class ClaudeAgentSession:
 
     def __exit__(self, *exc: Any) -> None:
         self.close()
+
+
+def _json_dumps(obj: Any) -> str:
+    import json
+
+    try:
+        return json.dumps(obj, ensure_ascii=False)
+    except Exception:
+        return str(obj)
+
+
+def _coerce_input_text(user_input: Any) -> str:
+    """Collapse Hermes/OpenAI rich content into plain turn text — mirrors
+    codex_app_server_session._coerce_turn_input_text so images degrade to
+    their text parts identically."""
+    if isinstance(user_input, list):
+        parts: list[str] = []
+        for item in user_input:
+            if isinstance(item, str):
+                if item.strip():
+                    parts.append(item)
+                continue
+            if not isinstance(item, dict):
+                if item is not None:
+                    parts.append(str(item))
+                continue
+            item_type = item.get("type")
+            if item_type in {"text", "input_text"}:
+                text = item.get("text") or item.get("content") or ""
+                if text:
+                    parts.append(str(text))
+            elif item_type in {"image", "image_url", "input_image"}:
+                parts.append("[image attached]")
+        return "\n\n".join(p for p in parts if p).strip()
+    return "" if user_input is None else str(user_input)
