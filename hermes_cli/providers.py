@@ -102,6 +102,15 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         transport="anthropic_messages",
         extra_env_vars=("ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
     ),
+    # Claude subscription via a local Anthropic-compatible proxy (Claude Agent
+    # SDK). Selecting it auto-starts the proxy; the real base_url (with the
+    # resolved port) comes from resolve_runtime_provider's short-circuit.
+    "claude-max": HermesOverlay(
+        transport="anthropic_messages",
+        auth_type="oauth_external",
+        extra_env_vars=("CLAUDE_CODE_OAUTH_TOKEN", "HERMES_CLAUDE_MAX_PORT"),
+        base_url_override="http://127.0.0.1:8646",
+    ),
     "zai": HermesOverlay(
         transport="openai_chat",
         extra_env_vars=("GLM_API_KEY", "ZAI_API_KEY", "Z_AI_API_KEY"),
@@ -238,6 +247,11 @@ class ProviderDef:
 # Uses models.dev IDs where possible.
 
 ALIASES: Dict[str, str] = {
+    # claude-max (subscription proxy)
+    "claudemax": "claude-max",
+    "claude-max-proxy": "claude-max",
+    "cmax": "claude-max",
+
     # openrouter
     "openai": "openrouter",     # bare "openai" → route through aggregator
 
@@ -363,6 +377,7 @@ _LABEL_OVERRIDES: Dict[str, str] = {
     "moa": "Mixture of Agents",
     "nous": "Nous Portal",
     "openai-codex": "OpenAI Codex",
+    "claude-max": "Claude Max (subscription proxy)",
     "copilot-acp": "GitHub Copilot ACP",
     "stepfun": "StepFun Step Plan",
     "xiaomi": "Xiaomi MiMo",

@@ -1535,6 +1535,24 @@ def resolve_runtime_provider(
             "requested_provider": requested_provider,
         }
 
+    # claude-max: a local Anthropic-compatible proxy backed by the Claude Agent
+    # SDK (Claude subscription). Selecting it auto-starts the server on demand
+    # and points hermes' anthropic transport at it — no API key needed (the
+    # Claude Code subprocess owns auth). See hermes_cli/claude_max/.
+    if requested_provider in {"claude-max", "claudemax", "claude-max-proxy", "cmax"}:
+        from hermes_cli.claude_max import LOCAL_API_KEY
+        from hermes_cli.claude_max.manager import ensure_server_running
+
+        port = ensure_server_running()  # raises with an actionable message
+        return {
+            "provider": "claude-max",
+            "api_mode": "anthropic_messages",
+            "base_url": f"http://127.0.0.1:{port}",
+            "api_key": LOCAL_API_KEY,
+            "source": "claude-max-proxy",
+            "requested_provider": requested_provider,
+        }
+
     # Azure Anthropic short-circuit: when explicitly targeting an Azure endpoint
     # with provider="anthropic", bypass _resolve_named_custom_runtime (which would
     # return provider="custom" with chat_completions api_mode and no valid key).

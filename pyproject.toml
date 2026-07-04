@@ -144,6 +144,10 @@ dependencies = [
 # Native Anthropic provider — only needed when provider=anthropic (not via
 # OpenRouter or other aggregators).
 anthropic = ["anthropic==0.87.0"]  # CVE-2026-34450, CVE-2026-34452
+# claude-max — local Anthropic-compatible proxy backed by the Claude Agent SDK
+# (Claude subscription). aiohttp powers the local server; the SDK drives the
+# subprocess. Also requires the `claude` CLI (non-pip, logged in).
+claude-max = ["claude-agent-sdk==0.2.110", "aiohttp==3.14.1"]
 # Web search backends — each only loaded when the user picks it as their
 # search provider (configured via `hermes tools` or config.yaml).
 exa = ["exa-py==2.10.2"]

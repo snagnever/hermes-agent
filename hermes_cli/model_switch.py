@@ -1761,10 +1761,30 @@ def list_authenticated_providers(
                     has_creds = True
             except Exception as exc:
                 logger.debug("Anthropic external creds check failed: %s", exc)
+        # claude-max's auth lives in the Claude Code CLI (subscription login /
+        # keychain), not an env var or the Hermes auth store — treat it as
+        # available when the `claude` CLI is installed. Login is validated at
+        # turn time; the proxy auto-starts on use.
+        if not has_creds and hermes_slug == "claude-max":
+            try:
+                from hermes_cli.claude_max.manager import check_claude_binary
+                ok, _ = check_claude_binary()
+                has_creds = bool(ok)
+            except Exception as exc:
+                logger.debug("claude CLI availability check failed: %s", exc)
         if not has_creds:
             continue
 
-        if hermes_slug in {"openai-codex", "copilot", "copilot-acp"}:
+        if hermes_slug == "claude-max":
+            # No REST catalog on the subscription path — use the provider
+            # profile's static fallback_models.
+            try:
+                from providers import get_provider_profile as _gpp
+                _prof = _gpp("claude-max")
+                model_ids = list(_prof.fallback_models) if _prof else []
+            except Exception:
+                model_ids = []
+        elif hermes_slug in {"openai-codex", "copilot", "copilot-acp"}:
             # Use live OAuth-backed discovery so the gateway /model picker
             # matches what the user's authenticated Codex/Copilot backend
             # actually serves — including ChatGPT-Pro-only Codex slugs
